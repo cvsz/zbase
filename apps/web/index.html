@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>S3Vault console</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<div id="login-view" class="view" hidden>
+  <main class="login-shell">
+    <form id="login-form" class="card login-card" novalidate>
+      <h1 class="brand">S3Vault</h1>
+      <p class="muted">Self-hosted S3 object storage</p>
+
+      <div class="field">
+        <label for="login-username">Username</label>
+        <input id="login-username" name="username" autocomplete="username" required
+               autocapitalize="none" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input id="login-password" name="password" type="password"
+               autocomplete="current-password" required>
+      </div>
+
+      <button type="submit" class="btn primary">Sign in</button>
+      <p id="login-error" class="error" role="alert" hidden></p>
+    </form>
+  </main>
+</div>
+
+<div id="app-view" class="view" hidden>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="topbar">
+    <span class="brand small">S3Vault</span>
+    <nav class="tabs" aria-label="Sections">
+      <button class="tab" data-view="overview" aria-current="page">Overview</button>
+      <button class="tab" data-view="buckets">Buckets</button>
+      <button class="tab" data-view="credentials">Access keys</button>
+      <button class="tab" data-view="audit">Audit</button>
+      <button class="tab" data-view="settings">Settings</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="whoami" class="muted"></span>
+      <button id="logout" class="btn ghost">Sign out</button>
+    </div>
+  </header>
+
+  <p id="flash" class="flash" role="status" aria-live="polite" hidden></p>
+
+  <main id="main" class="content">
+    <section id="view-overview" class="panel" aria-labelledby="h-overview">
+      <h2 id="h-overview">Overview</h2>
+      <div class="stat-grid" id="stat-grid"></div>
+      <h3>Engine</h3>
+      <div id="engine-panel"></div>
+    </section>
+
+    <section id="view-buckets" class="panel" hidden aria-labelledby="h-buckets">
+      <div class="row-between">
+        <h2 id="h-buckets">Buckets</h2>
+        <form id="create-bucket-form" class="inline-form">
+          <label class="sr-only" for="new-bucket">New bucket name</label>
+          <input id="new-bucket" name="bucket" placeholder="new-bucket-name" required
+                 autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]">
+          <button type="submit" class="btn primary">Create</button>
+        </form>
+      </div>
+      <table class="table">
+        <caption class="sr-only">Buckets</caption>
+        <thead><tr><th scope="col">Name</th><th scope="col">Owner</th>
+          <th scope="col">Versioning</th><th scope="col">Created</th>
+          <th scope="col">Actions</th></tr></thead>
+        <tbody id="bucket-rows"></tbody>
+      </table>
+      <p id="buckets-empty" class="empty" hidden>No buckets yet. Create one above.</p>
+    </section>
+
+    <section id="view-objects" class="panel" hidden aria-labelledby="h-objects">
+      <div class="row-between">
+        <h2 id="h-objects">Objects <span id="objects-bucket" class="muted"></span></h2>
+        <div class="inline-form">
+          <label class="sr-only" for="upload-file">Upload a file</label>
+          <input id="upload-file" type="file">
+          <button id="upload-btn" type="button" class="btn">Upload</button>
+          <button id="back-buckets" type="button" class="btn ghost">All buckets</button>
+        </div>
+      </div>
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <table class="table">
+        <caption class="sr-only">Objects</caption>
+        <thead><tr><th scope="col">Key</th><th scope="col">Size</th>
+          <th scope="col">Type</th><th scope="col">Modified</th>
+          <th scope="col">Actions</th></tr></thead>
+        <tbody id="object-rows"></tbody>
+      </table>
+      <p id="objects-empty" class="empty" hidden>This prefix is empty.</p>
+    </section>
+
+    <section id="view-credentials" class="panel" hidden aria-labelledby="h-credentials">
+      <h2 id="h-credentials">Access keys</h2>
+      <form id="create-credential-form" class="card">
+        <div class="field-row">
+          <div class="field">
+            <label for="cred-permissions">Permissions</label>
+            <select id="cred-permissions" name="permissions">
+              <option value="read">Read only</option>
+              <option value="write">Write only</option>
+              <option value="readwrite" selected>Read and write</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="cred-buckets">Bucket scope (optional)</label>
+            <input id="cred-buckets" name="buckets" placeholder="comma,separated"
+                   autocapitalize="none" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="cred-prefix">Prefix scope (optional)</label>
+            <input id="cred-prefix" name="prefix" placeholder="public/" autocapitalize="none">
+          </div>
+          <div class="field">
+            <label for="cred-description">Description</label>
+            <input id="cred-description" name="description" maxlength="200">
+          </div>
+        </div>
+        <button type="submit" class="btn primary">Create access key</button>
+      </form>
+
+      <div id="secret-reveal" class="card secret" hidden>
+        <h3>Copy the secret now</h3>
+        <p class="warn">This secret is shown once and cannot be retrieved again.</p>
+        <dl>
+          <dt>Access key ID</dt><dd><code id="reveal-akid"></code></dd>
+          <dt>Secret access key</dt><dd><code id="reveal-secret"></code></dd>
+        </dl>
+        <button type="button" class="btn ghost" id="dismiss-secret">I have saved it</button>
+      </div>
+
+      <table class="table">
+        <caption class="sr-only">Access keys</caption>
+        <thead><tr><th scope="col">Access key ID</th><th scope="col">Permissions</th>
+          <th scope="col">Scope</th><th scope="col">Last used</th>
+          <th scope="col">Created</th><th scope="col">Actions</th></tr></thead>
+        <tbody id="credential-rows"></tbody>
+      </table>
+      <p id="credentials-empty" class="empty" hidden>No access keys yet.</p>
+    </section>
+
+    <section id="view-audit" class="panel" hidden aria-labelledby="h-audit">
+      <div class="row-between">
+        <h2 id="h-audit">Audit log</h2>
+        <a class="btn ghost" href="/api/v1/audit-events/export" download>Export JSONL</a>
+      </div>
+      <table class="table">
+        <caption class="sr-only">Audit events, newest first</caption>
+        <thead><tr><th scope="col">When</th><th scope="col">Actor</th>
+          <th scope="col">Action</th><th scope="col">Target</th>
+          <th scope="col">Outcome</th></tr></thead>
+        <tbody id="audit-rows"></tbody>
+      </table>
+      <p id="audit-empty" class="empty" hidden>No audit events recorded yet.</p>
+    </section>
+
+    <section id="view-settings" class="panel" hidden aria-labelledby="h-settings">
+      <h2 id="h-settings">Settings</h2>
+      <div id="settings-body"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="confirm-dialog" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <h2 id="confirm-title">Confirm</h2>
+    <p id="confirm-message"></p>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn ghost">Cancel</button>
+      <button value="confirm" class="btn danger">Confirm</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="/assets/app.js"></script>
+</body>
+</html>
