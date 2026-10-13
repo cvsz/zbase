@@ -1,0 +1,6 @@
+{
+  "name": "zbase",
+  "owner": "cvsz",
+  "codeowner": "cvsz",
+  "description": "Self-hosted S3-compatible object storage platform with a web management console"
+}
