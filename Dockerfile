@@ -15,7 +15,7 @@ WORKDIR /build
 # Dependencies first so the layer caches across source changes.
 COPY requirements.txt ./
 RUN python -m venv /opt/venv \
- && /opt/venv/bin/pip install --require-hashes=false -r requirements.txt
+ && /opt/venv/bin/pip install -r requirements.txt
 
 COPY apps ./apps
 COPY migrations ./migrations
