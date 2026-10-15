@@ -14,7 +14,6 @@ run against one database without processing the same job twice.
 
 from __future__ import annotations
 
-import datetime as dt
 import os
 import signal
 import structlog

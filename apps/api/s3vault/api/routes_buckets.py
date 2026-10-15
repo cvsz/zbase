@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, Field
 
-from ..errors import NotFoundError, PermissionError_, ValidationError
+from ..errors import NotFoundError, ValidationError
 from ..security.rbac import Capability
 from ..services.audit import (
     BUCKET_CONFIG_CHANGED,
@@ -23,7 +22,6 @@ from .deps import (
     ConfigDep,
     ServicesDep,
     client_ip,
-    parse_bool,
     parse_int,
     require_actor,
     require_capability,

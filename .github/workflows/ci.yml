@@ -131,11 +131,29 @@ jobs:
           docker rm -f s3vault-smoke || true
 
       - name: Build the Compose deployment
+        env:
+          PUBLIC_HOSTNAME: ci.local
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-dummy-password
+          POSTGRES_DB: ci
+          STORAGE_ROOT_ACCESS_KEY: ci-ak
+          STORAGE_ROOT_SECRET_KEY: ci-dummy-secret
+          KEK_BASE64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: docker compose config --quiet
 
   deployment-contract:
     name: compose contract
     runs-on: ubuntu-24.04
+    env:
+      # Render-only dummies so `docker compose config` can interpolate the
+      # required variables in CI. Never used to start services.
+      PUBLIC_HOSTNAME: ci.local
+      POSTGRES_USER: ci
+      POSTGRES_PASSWORD: ci-dummy-password
+      POSTGRES_DB: ci
+      STORAGE_ROOT_ACCESS_KEY: ci-ak
+      STORAGE_ROOT_SECRET_KEY: ci-dummy-secret
+      KEK_BASE64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

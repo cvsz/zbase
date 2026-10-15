@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from ..errors import ValidationError
 from ..security.rbac import Capability
-from ..services.audit import CREDENTIAL_CREATED, CREDENTIAL_REVOKED, CREDENTIAL_ROTATED, SETTINGS_CHANGED
+from ..services.audit import CREDENTIAL_CREATED, CREDENTIAL_REVOKED, CREDENTIAL_ROTATED
 from ..services.users import Actor
 from .deps import (
     ConfigDep,

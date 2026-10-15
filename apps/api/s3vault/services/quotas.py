@@ -24,7 +24,6 @@ from typing import Any
 from ..config import AppConfig
 from ..db import Database
 from ..errors import QuotaExceededError
-from ..security.tokens import utcnow
 
 RESERVATION_TTL_S = 3600
 
