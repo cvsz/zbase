@@ -267,8 +267,13 @@ def load_config(env: str | None = None) -> AppConfig:
     # --- storage engine ----------------------------------------------
     endpoint = _require("STORAGE_ENGINE_ENDPOINT").rstrip("/")
     _validate_engine_endpoint(endpoint)
-    if is_prod and endpoint.startswith("http://"):
-        issues.append("STORAGE_ENGINE_ENDPOINT is plaintext HTTP in production")
+    plaintext_allowed = _env_bool("STORAGE_PLAINTEXT_ALLOWED", False)
+    if is_prod and endpoint.startswith("http://") and not plaintext_allowed:
+        issues.append(
+            "STORAGE_ENGINE_ENDPOINT is plaintext HTTP in production; either terminate "
+            "TLS to the engine or set STORAGE_PLAINTEXT_ALLOWED=true when the engine "
+            "is only reachable over an isolated internal network"
+        )
     addressing = (_env("STORAGE_ADDRESSING_STYLE", "path") or "path").lower()
     if addressing not in {"path", "virtual"}:
         raise ConfigError("STORAGE_ADDRESSING_STYLE must be 'path' or 'virtual'")

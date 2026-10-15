@@ -76,6 +76,25 @@ class TestProductionFailClosed:
             load_config(ENV_PROD)
         assert "plaintext" in str(exc.value)
 
+    def test_plaintext_internal_engine_allowed_when_opted_in(self, monkeypatch):
+        """A compose deployment reaches the engine over an internal network.
+
+        Plaintext is acceptable only when the operator states the engine is
+        not exposed, which is opt-in rather than inferred.
+        """
+        _env(
+            monkeypatch,
+            STORAGE_ENGINE_ENDPOINT="http://seaweedfs:8333",
+            STORAGE_PLAINTEXT_ALLOWED="true",
+        )
+        cfg = load_config(ENV_PROD)
+        assert cfg.storage.endpoint_url == "http://seaweedfs:8333"
+
+    def test_opt_in_is_still_refused_without_the_flag(self, monkeypatch):
+        _env(monkeypatch, STORAGE_ENGINE_ENDPOINT="http://seaweedfs:8333")
+        with pytest.raises(ConfigError):
+            load_config(ENV_PROD)
+
     def test_insecure_cookie_rejected_in_prod(self, monkeypatch):
         _env(monkeypatch, COOKIE_SECURE="false")
         with pytest.raises(ConfigError, match="COOKIE_SECURE"):
