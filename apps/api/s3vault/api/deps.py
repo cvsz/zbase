@@ -12,7 +12,7 @@ from fastapi import Depends, Request, Response
 from ..config import AppConfig
 from ..errors import AuthError, PermissionError_, RateLimitedError, ValidationError
 from ..security.rbac import Capability, has_capability
-from ..security.tokens import hash_token, utcnow, verify_token_hash
+from ..security.tokens import verify_token_hash
 from ..services.users import Actor
 from ..storage.base import Feature
 
