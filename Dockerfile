@@ -4,7 +4,7 @@
 # Pinned to an explicit interpreter minor version so the interpreter used in CI
 # is the interpreter used in production.
 
-FROM python:3.14-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -24,7 +24,7 @@ COPY migrations ./migrations
 RUN /opt/venv/bin/python -m compileall -q apps
 
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm
+FROM python:3.15-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
