@@ -6,6 +6,10 @@ The format follows Keep a Changelog conventions; generated projects should adopt
 
 ## [Unreleased]
 
+### Fixed
+
+- Updated the pinned pytest-asyncio version to restore dependency resolution with pytest 9 in CI.
+
 ### Added
 
 - Safe project identity bootstrap with explicit dry-run/apply and idempotence tests.
