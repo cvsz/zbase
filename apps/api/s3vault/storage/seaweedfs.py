@@ -132,7 +132,7 @@ class SeaweedFSAdapter:
             )
         return StorageError(f"{context}: engine error {code or 'unknown'}")
 
-    def _call(self, context: str, func, /, **kwargs):  # noqa: ANN001, ANN003
+    def _call(self, context: str, func, /, **kwargs):
         try:
             return func(**kwargs)
         except be.ClientError as exc:
@@ -143,7 +143,7 @@ class SeaweedFSAdapter:
     # ------------------------------------------------------------------
     # capabilities
     # ------------------------------------------------------------------
-    def _attempt(self, feature: Feature, notes: dict[str, str], fn) -> None:  # noqa: ANN001
+    def _attempt(self, feature: Feature, notes: dict[str, str], fn) -> None:
         """Run a probe; record support only if it succeeds without error."""
         try:
             fn()
@@ -163,7 +163,7 @@ class SeaweedFSAdapter:
         # Liveness is a hard requirement: without it nothing else is meaningful.
         try:
             self._client.list_buckets()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise StorageError(f"storage engine unreachable: {exc}") from exc
         self._supported |= {
             Feature.BUCKET_LIST,
@@ -708,10 +708,16 @@ class SeaweedFSAdapter:
         )
         etag = str(resp.get("ETag", "")).strip('"')
         # CompleteMultipartUpload does not return a size; re-head for the truth.
+        # If head_object fails, report the failure explicitly rather than
+        # silently returning size=0, which would mask data loss.
         settled = self.head_object(bucket, key)
         if settled is not None:
             return settled
-        return ObjectInfo(key=key, size=0, etag=etag or None)
+        raise StorageError(
+            f"complete multipart upload: head_object returned None for "
+            f"{bucket}/{key} after successful completion; object size unknown "
+            f"(upload ETag: {etag or 'unknown'})"
+        )
 
     def abort_multipart_upload(self, bucket: str, key: str, upload_id: str) -> None:
         self._call(

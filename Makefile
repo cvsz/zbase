@@ -31,7 +31,7 @@ venv: ## Create the virtualenv and install pinned dependencies
 
 .PHONY: fmt-check
 fmt-check: ## Syntax-compile every module (formatting gate)
-	$(PY) -m compileall -q apps scripts/../tests
+	$(PY) -m compileall -q apps tests
 
 .PHONY: lint
 lint: ## Lint with ruff if available; otherwise compile-check
