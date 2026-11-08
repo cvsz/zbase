@@ -188,33 +188,97 @@ class CredentialService:
     def rotate(
         self, credential_id: str, *, user_id: str, created_by: str | None = None
     ) -> dict[str, Any]:
-        """Revoke a credential and issue its replacement, preserving scope."""
-        original = self.get(credential_id)
-        if original["revoked_at"] is not None:
-            raise ConflictError("credential is already revoked")
+        """Revoke a credential and issue its replacement, preserving scope.
 
-        replacement = self.create(
-            user_id=user_id,
-            permissions=list(original["permissions"]),
-            bucket_scope=list(original["bucket_scope"] or []),
-            prefix_scope=original["prefix_scope"],
-            description=original["description"],
-            expires_at=original["expires_at"],
-            created_by=created_by or user_id,
-        )
-        # Revoke the original, then record on the replacement what it was
-        # rotated from. ``rotated_from`` reads "this credential was rotated from
-        # <old id>"; writing it onto the old row pointed the relationship the
-        # wrong way (old <- new instead of new <- old).
-        self._db.execute(
-            "UPDATE credentials SET revoked_at = now() WHERE id = %s",
-            (credential_id,),
-        )
-        self._db.execute(
-            "UPDATE credentials SET rotated_from = %s WHERE id = %s",
-            (credential_id, replacement["id"]),
-        )
-        return replacement
+        All mutations run inside a single database transaction so a crash can
+        never leave both the original and its replacement active, and can never
+        lose the ``rotated_from`` relationship. The original row is locked with
+        ``FOR UPDATE`` so concurrent rotations of the same credential are
+        serialized instead of racing.
+        """
+        with self._db.transaction() as conn:
+            # Lock the original row for the duration of the transaction so a
+            # concurrent rotate() on the same credential serializes here.
+            row = conn.execute(
+                """
+                SELECT id, user_id, access_key_id, description, bucket_scope,
+                       prefix_scope, permissions, expires_at, revoked_at
+                FROM credentials WHERE id = %s FOR UPDATE
+                """,
+                (credential_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("credential not found")
+            if row["revoked_at"] is not None:
+                raise ConflictError("credential is already revoked")
+
+            perms = list(row["permissions"])
+            scope = list(row["bucket_scope"] or [])
+            prefix = row["prefix_scope"]
+            description = row["description"]
+            expires_at = row["expires_at"]
+
+            if expires_at is not None:
+                expires = _aware(expires_at)
+                if expires <= utcnow():
+                    raise ValidationError("credential has already expired")
+
+            access_key_id = new_access_key_id()
+            secret_access_key = new_secret_access_key()
+            replacement_id = _new_uuid()
+
+            sealed = seal(
+                secret_access_key,
+                credential_id=replacement_id,
+                access_key_id=access_key_id,
+                kek=self.kek,
+            )
+
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO credentials
+                        (id, user_id, access_key_id, secret_ciphertext, description,
+                         bucket_scope, prefix_scope, permissions, expires_at,
+                         created_by, rotated_from)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        replacement_id,
+                        user_id,
+                        access_key_id,
+                        sealed.blob,
+                        description[:200],
+                        scope,
+                        prefix or None,
+                        perms,
+                        expires_at,
+                        created_by or user_id,
+                        credential_id,
+                    ),
+                )
+            except Exception as exc:  # unique violation on a (astronomically unlikely) key clash
+                raise ConflictError("could not allocate a unique access key id; retry") from exc
+
+            # Revoke the original within the same transaction. The replacement
+            # already records rotated_from = <original id>, so the relationship
+            # reads "this credential was rotated from <old id>".
+            conn.execute(
+                "UPDATE credentials SET revoked_at = now() WHERE id = %s",
+                (credential_id,),
+            )
+
+        return {
+            "id": replacement_id,
+            "user_id": user_id,
+            "access_key_id": access_key_id,
+            "secret_access_key": secret_access_key,
+            "permissions": perms,
+            "bucket_scope": scope,
+            "prefix_scope": prefix,
+            "description": description[:200],
+            "expires_at": expires_at,
+        }
 
     def touch(self, access_key_id: str) -> None:
         self._db.execute(
