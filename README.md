@@ -28,7 +28,7 @@ executed.
 | Deployment bundle (Docker, nginx, scripts) | Implemented |
 | MFA, OIDC SSO | **Not implemented** — see below |
 
-**Test evidence: 195 tests passing** (88 unit, 72 integration + S3
+**Test evidence: 200 tests passing** (90 unit, 110 integration + S3
 compatibility, 35 security) against PostgreSQL 18 and SeaweedFS 3.97.
 
 ```bash

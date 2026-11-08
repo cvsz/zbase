@@ -14,7 +14,7 @@ def main() -> None:  # pragma: no cover - process entrypoint
     cfg = load_config()
     uvicorn.run(
         "s3vault.main:app",
-        host=cfg.host if hasattr(cfg, "host") else "0.0.0.0",
+        host="0.0.0.0",
         port=3000,
         log_config=None,  # structlog owns formatting and redaction
         access_log=False,

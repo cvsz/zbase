@@ -388,6 +388,38 @@ def test_credential_rotation_issues_a_new_secret(auth_client):
     assert not any(c["access_key_id"] == original_akid for c in listed)
 
 
+def test_credential_rotation_records_rotated_from_on_replacement(auth_client):
+    """rotated_from must read "this replacement was rotated from <old id>".
+
+    The relationship lives on the replacement row, pointing back at the
+    credential it replaces. Writing it onto the old row (pointing at the new
+    one) inverts the relationship.
+    """
+    services = auth_client.app.state.services
+    created = auth_client.post("/api/v1/credentials", json={"permissions": ["read"]})
+    credential_id = created.json()["credential"]["id"]
+
+    rotated = auth_client.post(f"/api/v1/credentials/{credential_id}/rotate")
+    assert rotated.status_code == 200
+    replacement_id = rotated.json()["credential"]["id"]
+
+    # The old (revoked) row must not claim to be rotated from the new one.
+    old_row = services.db.fetch_one(
+        "SELECT rotated_from FROM credentials WHERE id = %s", (credential_id,)
+    )
+    assert old_row is not None
+    assert old_row["rotated_from"] is None, "revoked row must not carry rotated_from"
+
+    # The replacement row must point back at the credential it replaced.
+    new_row = services.db.fetch_one(
+        "SELECT rotated_from FROM credentials WHERE id = %s", (replacement_id,)
+    )
+    assert new_row is not None
+    assert str(new_row["rotated_from"]) == credential_id, (
+        "replacement's rotated_from must be the original credential id"
+    )
+
+
 def test_invalid_permission_is_rejected(auth_client):
     response = auth_client.post("/api/v1/credentials", json={"permissions": ["destroy"]})
     assert response.status_code == 400
