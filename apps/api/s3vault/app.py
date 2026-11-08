@@ -78,7 +78,7 @@ def create_app(
         Migrator(services.db).apply()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):  # noqa: ANN202
+    async def lifespan(app: FastAPI):
         log.info(
             "s3vault.starting",
             env=cfg.env,
@@ -87,7 +87,6 @@ def create_app(
             issues=list(cfg.issues),
         )
         try:
-            services.capabilities
             log.info(
                 "s3vault.engine_ready",
                 engine=services.capabilities.engine_name,
@@ -123,7 +122,7 @@ def create_app(
     return app
 
 
-def _install_operational_routes(app: FastAPI, services: "Services") -> None:
+def _install_operational_routes(app: FastAPI, services: Services) -> None:
     @app.get("/healthz", include_in_schema=False)
     async def liveness() -> dict[str, Any]:
         """Liveness: the process is up. No dependency checks, no secrets."""
@@ -147,13 +146,42 @@ def _install_operational_routes(app: FastAPI, services: "Services") -> None:
 # ---------------------------------------------------------------------------
 # middleware
 # ---------------------------------------------------------------------------
+class _BodyLimitExceeded(Exception):
+    """Raised by the streaming receiver when the configured body limit is breached."""
+
+
+def _limited_receive(receive, limit: int):
+    """Return an ASGI ``receive`` wrapper that counts incoming bytes without buffering.
+
+    Counts bytes as they arrive across multiple ``receive`` calls so chunked /
+    no-``Content-Length`` requests are bound by ``REQUEST_BODY_LIMIT_BYTES`` too.
+    On breach it raises so the middleware can return a structured 413 before the
+    route handler sees the body. Bytes are passed through unmodified, so
+    multipart and streaming uploads are not corrupted.
+    """
+    total = 0
+
+    async def wrapper() -> dict:
+        nonlocal total
+        message = await receive()
+        if message.get("type") == "http.request":
+            body = message.get("body") or b""
+            total += len(body)
+            if total > limit:
+                raise _BodyLimitExceeded()
+        return message
+
+    return wrapper
+
+
 def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
     # Reject oversized request bodies before they are buffered or parsed.
     # `REQUEST_BODY_LIMIT_BYTES` is therefore a real limit, not a comment.
     limit = cfg.uploads.request_body_limit_bytes
 
     @app.middleware("http")
-    async def enforce_body_limit(request: Request, call_next):  # noqa: ANN202
+    async def enforce_body_limit(request: Request, call_next):
+        # Known-length bodies are rejected up front from the declared header.
         declared = request.headers.get("content-length")
         if declared is not None:
             try:
@@ -182,22 +210,28 @@ def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
                         }
                     },
                 )
-        # Chunked bodies declare no length; enforce while streaming.
-        body = await request.body()
-        if len(body) > limit:
+            return await call_next(request)
+
+        # Chunked / transfer-encoded bodies: enforce a running byte counter on
+        # the ASGI receive stream so the documented limit cannot be bypassed by
+        # omitting Content-Length.
+        request._receive = _limited_receive(request._receive, limit)
+        try:
+            return await call_next(request)
+        except _BodyLimitExceeded:
             return JSONResponse(
                 status_code=413,
                 content={
                     "error": {
                         "code": "payload_too_large",
                         "message": (
-                            f"request body exceeds the configured limit of {limit} bytes"
+                            "request body exceeds the configured limit of "
+                            f"{limit} bytes; use multipart or presigned upload"
                         ),
                         "details": {"limit_bytes": limit},
                     }
                 },
             )
-        return await call_next(request)
 
     # Trust proxy headers only when the operator has declared trusted hops.
     # `trusted_hosts` is the ASGI-level control; uvicorn additionally needs
@@ -209,7 +243,7 @@ def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
 
     # Baseline security headers. CSP is strict: the console ships no inline script.
     @app.middleware("http")
-    async def security_headers(request: Request, call_next):  # noqa: ANN202
+    async def security_headers(request: Request, call_next):
         response = await call_next(request)
         headers = response.headers
         headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -231,7 +265,7 @@ def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
         return response
 
     @app.middleware("http")
-    async def request_context(request: Request, call_next):  # noqa: ANN202
+    async def request_context(request: Request, call_next):
         request_id = request.headers.get("X-Request-ID") or secrets.token_hex(8)
         structlog.contextvars.bind_contextvars(request_id=request_id)
         request.state.request_id = request_id
@@ -258,7 +292,7 @@ def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
 
 def _install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
-    async def handle_app_error(request: Request, exc: AppError):  # noqa: ANN202
+    async def handle_app_error(request: Request, exc: AppError):
         if exc.status >= 500:
             log.error("app.error", code=exc.code, error=exc.message)
         else:
@@ -266,7 +300,7 @@ def _install_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=exc.status, content=exc.to_payload())
 
     @app.exception_handler(ConfigError)
-    async def handle_config_error(request: Request, exc: ConfigError):  # noqa: ANN202
+    async def handle_config_error(request: Request, exc: ConfigError):
         log.error("config.invalid", error=str(exc))
         return JSONResponse(
             status_code=500,
@@ -280,7 +314,7 @@ def _install_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def handle_unexpected(request: Request, exc: Exception):  # noqa: ANN202
+    async def handle_unexpected(request: Request, exc: Exception):
         log.error("app.unhandled", error=f"{type(exc).__name__}", detail=str(exc)[:300])
         # Never echo an internal message to an unauthenticated caller.
         return JSONResponse(
@@ -295,7 +329,7 @@ def _install_error_handlers(app: FastAPI) -> None:
         )
 
 
-def _install_routes(app: FastAPI, cfg: AppConfig, services: "Services") -> None:
+def _install_routes(app: FastAPI, cfg: AppConfig, services: Services) -> None:
     """Attach the API routers and the management console.
 
     Must run after the operational routes are registered: the console mounts a

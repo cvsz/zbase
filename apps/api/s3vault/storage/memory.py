@@ -41,7 +41,7 @@ _UNSUPPORTED_BY_DEFAULT = frozenset(
 
 
 class _Entry:
-    __slots__ = ("data", "content_type", "etag", "last_modified", "metadata")
+    __slots__ = ("content_type", "data", "etag", "last_modified", "metadata")
 
     def __init__(
         self,
@@ -61,7 +61,7 @@ class MemoryAdapter:
 
     engine_name = "memory"
 
-    def __init__(self, config=None, *, unsupported: frozenset[Feature] = _UNSUPPORTED_BY_DEFAULT) -> None:  # noqa: ANN001
+    def __init__(self, config=None, *, unsupported: frozenset[Feature] = _UNSUPPORTED_BY_DEFAULT) -> None:
         self._lock = threading.RLock()
         self._buckets: dict[str, dict[str, _Entry]] = {}
         self._meta: dict[str, dict] = {}
@@ -329,7 +329,13 @@ class MemoryAdapter:
                     raise ValidationError(f"etag mismatch for part {part.part_number}")
                 chunks.append(stored[0])
             payload = b"".join(chunks)
+            # Atomic completion: create the entry first, then remove the upload state.
+            # If put_object fails, the upload state is preserved so the upload can
+            # be retried or aborted rather than silently lost.
             entry = _Entry(payload, "application/octet-stream", {})
+            # Atomic completion: store the entry first, then clear the upload state.
+            # If the store fails, the upload state is preserved because the pop
+            # below is never reached when the assignment raises.
             self._store(bucket)[key] = entry
             self._uploads.pop(upload_id, None)
             return ObjectInfo(
