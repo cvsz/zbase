@@ -124,7 +124,7 @@ class UsageService:
 
     def engine_capacity(self) -> dict[str, Any]:
         """Capacity from the engine when available, otherwise explicitly unknown."""
-        caps = getattr(self._adapter, "_capabilities", None)
+        caps = self._adapter.capabilities
         if caps is not None and not caps.supports(Feature.ENGINE_USAGE_METRICS):
             return {
                 "available": False,

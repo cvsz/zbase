@@ -139,6 +139,14 @@ class StorageAdapter(Protocol):
     def probe(self) -> Capabilities:
         """Measure engine capabilities. Must not raise for a reachable engine."""
 
+    @property
+    def capabilities(self) -> Capabilities | None:
+        """Capabilities probed so far, or ``None`` if not yet probed.
+
+        Callers that need the measured capabilities without (re-)probing the
+        engine read this instead of reaching into the private cache.
+        """
+
     def healthy(self) -> bool: ...
 
     # buckets

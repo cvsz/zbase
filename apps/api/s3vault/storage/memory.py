@@ -82,6 +82,10 @@ class MemoryAdapter:
             )
         return self._capabilities
 
+    @property
+    def capabilities(self) -> Capabilities | None:
+        return self._capabilities
+
     def healthy(self) -> bool:
         return self.reachable
 

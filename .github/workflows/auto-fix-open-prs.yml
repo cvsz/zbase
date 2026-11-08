@@ -14,36 +14,18 @@ concurrency:
   group: auto-fix-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege note: this workflow performs read-only validation only
+# (it reports issues; it never creates, edits, or approves pull requests and
+# never pushes). `contents: read` is therefore sufficient. No `pull-requests:`
+# or `issues: write` permission is granted, and no write-capable secret is
+# required. The GPG/POLIEDBC secrets formerly referenced here have been
+# removed because no signing or push path exists in this workflow.
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 jobs:
-  validate-secrets:
-    name: Validate required secrets
-    runs-on: ubuntu-latest
-    outputs:
-      all-present: ${{ steps.check.outputs.all-present }}
-    steps:
-      - name: Check required secrets
-        id: check
-        run: |
-          MISSING=""
-          [ -z "${{ secrets.GPG_PASSPHRASE }}" ] && MISSING="$MISSING GPG_PASSPHRASE"
-          [ -z "${{ secrets.GPG_SIGNING_KEY }}" ] && MISSING="$MISSING GPG_SIGNING_KEY"
-          [ -z "${{ secrets.POLIEDBC_PAT }}" ] && MISSING="$MISSING POLIEDBC_PAT"
-          if [ -n "$MISSING" ]; then
-            echo "::error::Required secrets not set:$MISSING"
-            echo "all-present=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          echo "all-present=true" >> $GITHUB_OUTPUT
-
   auto-fix-prs:
-    name: Auto-fix open PRs
-    needs: validate-secrets
-    if: needs.validate-secrets.outputs.all-present == 'true'
+    name: Auto-fix open PRs (read-only report)
     runs-on: ubuntu-latest
 
     steps:
@@ -54,19 +36,7 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.inputs.pr_number && format('refs/pull/{0}/merge', github.event.inputs.pr_number) || github.ref }}
 
-      - name: Configure git identity (local only, no signing)
-        run: |
-          git config user.name "cvsz"
-          git config user.email "cvsz@seaza.com"
-          git config commit.gpgsign false
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y ruby python3-pip
-          pip3 install pyyaml
-
-      - name: Run auto-fix checks (read-only validation)
+      - name: Run auto-fix checks (read-only validation, no mutations)
         id: autofix
         run: |
           FIX_COUNT=0
@@ -95,5 +65,5 @@ jobs:
             echo "## Auto-fix Results" >> $GITHUB_STEP_SUMMARY
             echo "- Issues found: ${FIX_COUNT}" >> $GITHUB_STEP_SUMMARY
             echo "- Repo: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-            echo "PR-triggered signing and push are disabled. Use workflow_dispatch to apply fixes." >> $GITHUB_STEP_SUMMARY
+            echo "No signing or push path exists in this workflow; findings are reported for manual review." >> $GITHUB_STEP_SUMMARY
           fi

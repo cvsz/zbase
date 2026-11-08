@@ -28,10 +28,13 @@ class BucketService:
         db: Database,
         adapter: StorageAdapter,
         capabilities: Capabilities,
+        *,
+        max_buckets_per_user: int,
     ) -> None:
         self._db = db
         self._adapter = adapter
         self._caps = capabilities
+        self._max_buckets_per_user = max_buckets_per_user
 
     # -- queries ---------------------------------------------------------
     def get(self, name: str) -> dict[str, Any]:
@@ -119,9 +122,7 @@ class BucketService:
         count_row = self._db.fetch_one(
             "SELECT count(*) AS n FROM buckets WHERE owner_id = %s", (owner_id,)
         )
-        from ..config import load_config  # local import to avoid a cycle
-
-        limit = load_config().quotas.max_buckets_per_user
+        limit = self._max_buckets_per_user
         if count_row and limit != -1 and int(count_row["n"]) >= limit:
             raise ConflictError(
                 f"bucket limit reached for this account ({limit})",
