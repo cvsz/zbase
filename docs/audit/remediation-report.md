@@ -1,7 +1,7 @@
 # Remediation Report — S3Vault
 
 **Repository:** cvsz/zbase
-**Baseline SHA:** `d70a681cc9f88884f644d5c43b0a259b62d78635`
+**Baseline SHA:** `256054fcb9f807fa280ce30ec3ca37795dceaa62` (HEAD of `feat/zbase-enterprise-hardening`)
 **Branch:** `feat/zbase-enterprise-hardening`
 **Remediation date:** Sun Nov 08 2026
 
@@ -134,6 +134,7 @@ database or engine required); `make ci` passes.
 | All credential tests | `pytest tests/integration/test_api.py -k "credential or rotation or rotated"` | 11 passed | VERIFIED |
 | Unit tests | `pytest tests/unit -q` | 95 passed | VERIFIED |
 | Integration + Security + S3-compat | `pytest tests/integration tests/security tests/s3-compatibility` | 113 passed against live PostgreSQL 18 + SeaweedFS 3.97 | VERIFIED |
+| Total (all suites) | `pytest tests/unit tests/integration tests/security tests/s3-compatibility` | 208 passed | VERIFIED |
 | Lint | `ruff check apps tests` | All checks passed | VERIFIED |
 | Compile check | `compileall -q apps tests` | OK | VERIFIED |
 | Shellcheck | `shellcheck scripts/*.sh` | Exit 0 | VERIFIED |

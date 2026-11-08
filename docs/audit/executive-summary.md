@@ -2,7 +2,7 @@
 
 **Repository:** cvsz/zbase (S3Vault — self-hosted S3-compatible object storage control plane)
 **Audit date:** Sun Nov 08 2026
-**Baseline SHA:** `35c1cfe` (HEAD of `feat/zbase-enterprise-hardening`, which is main `d70a681` plus the atomic credential-rotation fix `b9abb21` and this audit's supply-chain/coupling hardening `35c1cfe`)
+**Baseline SHA:** `256054fcb9f807fa280ce30ec3ca37795dceaa62` (HEAD of `feat/zbase-enterprise-hardening`, which is main `d70a681` plus the atomic credential-rotation fix `b9abb21`, the supply-chain/coupling hardening `35c1cfe`, and the storage plaintext opt-in / backup REPO_ROOT fix `256054f`)
 **Branch:** `feat/zbase-enterprise-hardening`
 **Framework:** ZEAZ reusable execution layer (ZEAZ-INTRODUCTION.md)
 
@@ -78,6 +78,7 @@ The audit covered all seven domains mandated by the mission:
 | Compile check | `compileall -q apps tests` | OK | VERIFIED |
 | Shell scripts | `shellcheck scripts/*.sh` | Exit 0, no diagnostics | VERIFIED |
 | Integration + Security + S3-compat | `pytest tests/integration tests/security tests/s3-compatibility` | 113 passed against live PostgreSQL 18 + SeaweedFS 3.97 | VERIFIED |
+| Total (all suites) | `pytest tests/unit tests/integration tests/security tests/s3-compatibility` | 208 passed | VERIFIED |
 | Bootstrap validation | `python3 -m unittest discover -s tests` | 5 passed | VERIFIED |
 | Template validation | `python3 scripts/validate_repo.py` | OK | VERIFIED |
 | Full CI gate | `make ci` | Exit 0 | VERIFIED |

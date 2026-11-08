@@ -1,7 +1,7 @@
 # Test Evidence — S3Vault
 
 **Repository:** cvsz/zbase
-**Baseline SHA:** `35c1cfe` (HEAD of `feat/zbase-enterprise-hardening`)
+**Baseline SHA:** `256054fcb9f807fa280ce30ec3ca37795dceaa62` (HEAD of `feat/zbase-enterprise-hardening`)
 **Test date:** Sun Nov 08 2026
 **Environment:** Linux, Python 3.14.4, Docker 29.9.3, PostgreSQL 18-alpine, SeaweedFS 3.97
 
@@ -209,4 +209,4 @@ Verifies secret access keys never appear in audit event exports.
 | Tokens and key generation | 6 tests |
 | RBAC capabilities | 5 tests |
 
-**Total unit: 90 passed**
+**Total unit: 95 passed**

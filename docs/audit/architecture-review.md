@@ -1,7 +1,7 @@
 # Architecture Review — S3Vault
 
 **Repository:** cvsz/zbase
-**Baseline SHA:** `d70a681cc9f88884f644d5c43b0a259b62d78635`
+**Baseline SHA:** `256054fcb9f807fa280ce30ec3ca37795dceaa62` (HEAD of `feat/zbase-enterprise-hardening`)
 **Reviewer date:** Sun Nov 08 2026
 
 ---
@@ -55,15 +55,11 @@ The control plane / data plane separation is well-defined: SeaweedFS owns object
 
 **Coupling concerns (Medium):**
 
-1. **`services/usage.py:127`** accesses `self._adapter._capabilities` — a private attribute of the concrete adapter. This breaks the abstraction boundary. The `StorageAdapter` Protocol does not expose capabilities publicly; callers should use `adapter.probe()` instead, though that re-probes the engine.
+1. **`services/usage.py:127`** — previously accessed `self._adapter._capabilities` (private attribute). **RESOLVED**: a public `capabilities` property was added to the `StorageAdapter` Protocol and `UsageService` now reads `self._adapter.capabilities`. Covered by `tests/unit/test_service_coupling.py`.
 
-   **Recommendation:** Add a `capabilities` property to the `StorageAdapter` Protocol or pass `Capabilities` into `UsageService` at construction time.
+2. **`services/buckets.py:122`** — previously imported `load_config` locally to work around an import cycle. **RESOLVED**: `max_buckets_per_user` is injected into `BucketService` at construction time; `app.py` passes it from config. Covered by `tests/unit/test_service_coupling.py`.
 
-2. **`services/buckets.py:122`** imports `load_config` locally to avoid an import cycle. This works but is a code smell indicating a potential cycle between `buckets` and `config`.
-
-   **Recommendation:** Pass `max_buckets_per_user` into `BucketService` at construction time instead of re-loading config.
-
-3. **`routes_buckets.py:560`** calls both `adapter.head_object()` and `bucket_service.get()` for presigned upload validation. The logic is correct but could be clearer.
+3. **`routes_buckets.py:560`** calls both `adapter.head_object()` and `bucket_service.get()` for presigned upload validation. The bucket-existence branch is unreachable because `assert_can_write` already verified the bucket earlier in the request. Harmless dead code; no behavioural impact.
 
 ---
 
@@ -114,16 +110,15 @@ No circular dependencies detected beyond the local `load_config` import in `buck
 - Migration checksums prevent silent migration drift
 
 **Technical debt (low/medium):**
-1. `usage.py:127` private attribute access (noted above)
-2. Local `load_config` import in `buckets.py:122`
-3. No shared/distributed rate limiter (per-process only — documented limitation)
-4. KEK rotation requires re-issuing all credentials (no re-encryption tool — documented limitation)
+1. `routes_buckets.py:560` unreachable bucket-existence branch in presigned upload validation (harmless dead code)
+2. No shared/distributed rate limiter (per-process only — documented limitation)
+3. KEK rotation requires re-issuing all credentials (no re-encryption tool — documented limitation)
 
 ---
 
 ## 6. Findings
 
-| ID | Severity | Title | File:Line | Recommendation |
-|-----|----------|-------|-----------|----------------|
-| ZB-ARC-01 | Medium | Private attribute coupling in usage service | `services/usage.py:127` | Expose capabilities via public API or inject at construction |
-| ZB-ARC-02 | Low | Local config import to avoid cycle | `services/buckets.py:122` | Inject `max_buckets_per_user` into `BucketService` constructor |
+| ID | Severity | Title | File:Line | Status |
+|-----|----------|-------|-----------|--------|
+| ZB-ARC-01 | Medium | Private attribute coupling in usage service | `services/usage.py:127` | **RESOLVED** — public `capabilities` property; regression test in `tests/unit/test_service_coupling.py` |
+| ZB-ARC-02 | Low | Local config import to avoid cycle | `services/buckets.py:122` | **RESOLVED** — `max_buckets_per_user` injected at construction; regression test in `tests/unit/test_service_coupling.py` |

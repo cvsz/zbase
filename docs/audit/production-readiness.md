@@ -1,7 +1,7 @@
 # Production Readiness — S3Vault
 
 **Repository:** cvsz/zbase
-**Baseline SHA:** `d70a681cc9f88884f644d5c43b0a259b62d78635`
+**Baseline SHA:** `256054fcb9f807fa280ce30ec3ca37795dceaa62` (HEAD of `feat/zbase-enterprise-hardening`)
 **Branch:** `feat/zbase-enterprise-hardening`
 **Review date:** Sun Nov 08 2026
 **Framework:** ZEAZ evidence states (VERIFIED / PARTIALLY VERIFIED / UNVERIFIED / BLOCKED / NOT APPLICABLE)
