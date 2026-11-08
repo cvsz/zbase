@@ -232,6 +232,60 @@ def test_oversized_body_is_rejected(auth_client, unique_bucket):
     assert response.status_code in {400, 413, 422}
 
 
+def test_limited_receive_rejects_chunked_body_over_limit():
+    """Chunked bodies without Content-Length must still honour REQUEST_BODY_LIMIT_BYTES."""
+    import asyncio
+
+    from s3vault.app import _BodyLimitExceeded, _limited_receive
+
+    chunks = [b"x" * 100, b"y" * 100, b"z" * 100]  # 300 bytes total
+
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": chunks.pop(0),
+            "more_body": bool(chunks),
+        }
+
+    receive_wrapper = _limited_receive(receive, 250)
+
+    async def run():
+        while True:
+            await receive_wrapper()
+
+    with pytest.raises(_BodyLimitExceeded):
+        asyncio.run(run())
+
+
+def test_limited_receive_allows_chunked_body_under_limit():
+    """Chunked bodies within the limit pass through unchanged."""
+    import asyncio
+
+    from s3vault.app import _limited_receive
+
+    chunks = [b"x" * 100, b"y" * 100]  # 200 bytes total
+    seen = []
+
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": chunks.pop(0),
+            "more_body": bool(chunks),
+        }
+
+    receive_wrapper = _limited_receive(receive, 1000)
+
+    async def run():
+        while True:
+            message = await receive_wrapper()
+            seen.append(message.get("body", b""))
+            if not message.get("more_body"):
+                break
+
+    asyncio.run(run())
+    assert b"".join(seen) == b"x" * 100 + b"y" * 100
+
+
 # ---------------------------------------------------------------------------
 # IDOR
 # ---------------------------------------------------------------------------

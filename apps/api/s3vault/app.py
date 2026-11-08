@@ -146,6 +146,34 @@ def _install_operational_routes(app: FastAPI, services: Services) -> None:
 # ---------------------------------------------------------------------------
 # middleware
 # ---------------------------------------------------------------------------
+class _BodyLimitExceeded(Exception):
+    """Raised by the streaming receiver when the configured body limit is breached."""
+
+
+def _limited_receive(receive, limit: int):
+    """Return an ASGI ``receive`` wrapper that counts incoming bytes without buffering.
+
+    Counts bytes as they arrive across multiple ``receive`` calls so chunked /
+    no-``Content-Length`` requests are bound by ``REQUEST_BODY_LIMIT_BYTES`` too.
+    On breach it raises so the middleware can return a structured 413 before the
+    route handler sees the body. Bytes are passed through unmodified, so
+    multipart and streaming uploads are not corrupted.
+    """
+    total = 0
+
+    async def wrapper() -> dict:
+        nonlocal total
+        message = await receive()
+        if message.get("type") == "http.request":
+            body = message.get("body") or b""
+            total += len(body)
+            if total > limit:
+                raise _BodyLimitExceeded()
+        return message
+
+    return wrapper
+
+
 def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
     # Reject oversized request bodies before they are buffered or parsed.
     # `REQUEST_BODY_LIMIT_BYTES` is therefore a real limit, not a comment.
@@ -153,11 +181,7 @@ def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
 
     @app.middleware("http")
     async def enforce_body_limit(request: Request, call_next):
-        # Only check Content-Length header for known-length bodies.
-        # DO NOT read request.body() here - it consumes the stream and breaks
-        # route handlers that need to read the body themselves (e.g., file uploads).
-        # For chunked transfer-encoding, FastAPI/Starlette will enforce limits
-        # when the body is actually read by the route handler.
+        # Known-length bodies are rejected up front from the declared header.
         declared = request.headers.get("content-length")
         if declared is not None:
             try:
@@ -186,7 +210,28 @@ def _install_middleware(app: FastAPI, cfg: AppConfig) -> None:
                         }
                     },
                 )
-        return await call_next(request)
+            return await call_next(request)
+
+        # Chunked / transfer-encoded bodies: enforce a running byte counter on
+        # the ASGI receive stream so the documented limit cannot be bypassed by
+        # omitting Content-Length.
+        request._receive = _limited_receive(request._receive, limit)
+        try:
+            return await call_next(request)
+        except _BodyLimitExceeded:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "error": {
+                        "code": "payload_too_large",
+                        "message": (
+                            "request body exceeds the configured limit of "
+                            f"{limit} bytes; use multipart or presigned upload"
+                        ),
+                        "details": {"limit_bytes": limit},
+                    }
+                },
+            )
 
     # Trust proxy headers only when the operator has declared trusted hops.
     # `trusted_hosts` is the ASGI-level control; uvicorn additionally needs
