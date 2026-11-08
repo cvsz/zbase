@@ -10,7 +10,7 @@ set -uo pipefail
 
 BACKUP_DIR="${1:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit
 
 DRILL_PG_PORT="${DRILL_PG_PORT:-56432}"
 DRILL_SW_PORT="${DRILL_SW_PORT:-8433}"
@@ -49,7 +49,7 @@ docker run -d --name "$SW_NAME" \
   chrislusf/seaweedfs:3.97 server -dir=/data -s3 -s3.port=8333 \
   -s3.allowEmptyFolder=true -ip=0.0.0.0 >/dev/null || die "could not start the drill SeaweedFS"
 
-for i in $(seq 1 90); do
+for _ in $(seq 1 90); do
   docker exec "$PG_NAME" pg_isready -U s3vault -d s3vault >/dev/null 2>&1 && break
   sleep 1
 done

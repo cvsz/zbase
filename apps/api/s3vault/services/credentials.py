@@ -202,9 +202,17 @@ class CredentialService:
             expires_at=original["expires_at"],
             created_by=created_by or user_id,
         )
+        # Revoke the original, then record on the replacement what it was
+        # rotated from. ``rotated_from`` reads "this credential was rotated from
+        # <old id>"; writing it onto the old row pointed the relationship the
+        # wrong way (old <- new instead of new <- old).
         self._db.execute(
-            "UPDATE credentials SET revoked_at = now(), rotated_from = %s WHERE id = %s",
-            (replacement["id"], credential_id),
+            "UPDATE credentials SET revoked_at = now() WHERE id = %s",
+            (credential_id,),
+        )
+        self._db.execute(
+            "UPDATE credentials SET rotated_from = %s WHERE id = %s",
+            (credential_id, replacement["id"]),
         )
         return replacement
 
