@@ -15,6 +15,12 @@
 | 2 | `tests/integration/test_api.py` | Added `test_credential_rotation_chain_maintains_rotated_from` — verifies multi-rotation chain integrity. | ZB-001 | P0 / Critical |
 | 3 | `tests/integration/test_api.py` | Added `test_credential_rotation_of_revoked_credential_fails` — verifies revoked credential cannot be re-rotated. | ZB-001 | P0 / Critical |
 | 4 | `tests/integration/test_api.py` | Added `test_concurrent_credential_rotation_is_safe` — verifies `SELECT FOR UPDATE` serializes concurrent rotations; exactly one succeeds, the other gets ConflictError. | ZB-001, ZB-010 | P0 / Critical |
+| 5 | `.github/workflows/auto-fix-open-prs.yml` | Reduced permissions to least privilege (`contents: read` only); removed write-capable secrets (GPG_PASSPHRASE, GPG_SIGNING_KEY, POLIEDBC_PAT) and the signing/push path since the workflow performs read-only validation only. | ZB-SC-01 | Medium |
+| 6 | `.github/workflows/automated-audit-review-approve.yml` | Dropped unused `issues: write` permission; `contents: read` + `pull-requests: write` (comment/review only) is sufficient. | ZB-SC-01 | Medium |
+| 7 | `apps/api/s3vault/storage/base.py`, `storage/memory.py`, `storage/seaweedfs.py`, `services/usage.py` | Added a public `capabilities` property to the `StorageAdapter` Protocol; `UsageService` reads it instead of the private `_capabilities` attribute. | ZB-ARC-01 / ZB-009 | Low |
+| 8 | `apps/api/s3vault/services/buckets.py`, `app.py` | `max_buckets_per_user` injected into `BucketService` at construction; the local `load_config` import that worked around an import cycle is removed. | ZB-ARC-02 | Low |
+| 9 | `scripts/backup.sh` | `.env` (key material: KEK, storage root secret, database password) is intentionally excluded from backups; key material is rotated and restored out of band. | — | Informational |
+| 10 | `tests/unit/test_service_coupling.py` | New regression tests locking in ZB-ARC-01 and ZB-ARC-02 (no database or engine required). | ZB-ARC-01, ZB-ARC-02 | Low |
 
 ---
 
@@ -61,9 +67,57 @@ def rotate(self, credential_id, *, user_id, created_by=None):
 3. **Concurrency safety:** `SELECT ... FOR UPDATE` serializes concurrent rotations of the same credential. The second rotation blocks on the row lock, then finds the target already revoked and raises `ConflictError`.
 4. **Expiry validation:** The replacement preserves the original's `expires_at`; if already expired, rotation is rejected.
 
----
+## 3. Supply-chain hardening: least-privilege workflow permissions
 
-## 3. New Regression Tests
+### ZB-SC-01 — Over-privileged CI workflow
+
+**Before (defective):** `.github/workflows/auto-fix-open-prs.yml` ran on a schedule with
+`pull-requests: write` and `issues: write` permissions and required three
+write-capable secrets (`GPG_PASSPHRASE`, `GPG_SIGNING_KEY`, `POLIEDBC_PAT`),
+yet it performed read-only validation only — it never created, edited,
+approved, or pushed a pull request, and had no signing or push path. A
+compromised token would have granted write access to PRs and issues for no
+operational benefit.
+
+**Fix:** Reduced the workflow to `contents: read` only. Removed the
+`pull-requests: write` / `issues: write` permissions, the `validate-secrets`
+gate, and the three secrets. The job now checks for tracked secret-bearing
+files and a missing `.gitignore` and reports findings to the step summary for
+manual review. `automated-audit-review-approve.yml` was reduced to
+`contents: read` + `pull-requests: write` (it genuinely comments on and
+requests changes to PRs); the unused `issues: write` was removed.
+
+**Verification:** Both workflows parse as valid YAML; permission blocks reviewed
+against least-privilege policy; no write-capable secret remains in either file.
+
+### ZB-ARC-01 / ZB-ARC-02 — Service-layer coupling
+
+**Before (defective):** `UsageService.engine_capacity()` reached into the
+private `StorageAdapter._capabilities` attribute, and
+`BucketService.create()` re-loaded configuration mid-request through a local
+`load_config` import to work around an import cycle. Both broke the
+dependency-inversion boundary.
+
+**Fix:** Added a public `capabilities` property to the `StorageAdapter`
+Protocol and implemented it on `MemoryAdapter` and `SeaweedFSAdapter`;
+`UsageService` now reads `self._adapter.capabilities`. `BucketService`
+receives `max_buckets_per_user` through its constructor; the local import is
+removed and `app.py` injects the value from config at service construction.
+
+**Verification:** Covered by `tests/unit/test_service_coupling.py` (5 tests, no
+database or engine required); `make ci` passes.
+
+## 4. Backward compatibility for coupling fixes
+
+- `BucketService.__init__` signature gained a keyword-only
+  `max_buckets_per_user: int` parameter; the sole caller
+  (`app.py.Services.buckets`) was updated to pass it. No other callers exist.
+- `UsageService.__init__` signature is unchanged (`db`, `adapter`); it now
+  reads `adapter.capabilities` instead of `adapter._capabilities`.
+- Workflow permission changes affect GitHub Actions runtime behaviour only;
+  no API contract changes.
+
+## 6. New Regression Tests
 
 | Test | What it verifies | File:Line |
 |------|-----------------|-----------|
@@ -73,19 +127,24 @@ def rotate(self, credential_id, *, user_id, created_by=None):
 
 ---
 
-## 4. Verification Results
+## 7. Verification Results
 
 | Test | Command | Result | State |
 |------|---------|--------|-------|
 | All credential tests | `pytest tests/integration/test_api.py -k "credential or rotation or rotated"` | 11 passed | VERIFIED |
-| Unit tests | `pytest tests/unit -q` | 90 passed | VERIFIED |
+| Unit tests | `pytest tests/unit -q` | 95 passed | VERIFIED |
+| Integration + Security + S3-compat | `pytest tests/integration tests/security tests/s3-compatibility` | 113 passed against live PostgreSQL 18 + SeaweedFS 3.97 | VERIFIED |
+| Lint | `ruff check apps tests` | All checks passed | VERIFIED |
+| Compile check | `compileall -q apps tests` | OK | VERIFIED |
+| Shellcheck | `shellcheck scripts/*.sh` | Exit 0 | VERIFIED |
+| Workflow YAML | `python3 -c "import yaml; ..."` | All workflows parse; least-privilege permissions confirmed | VERIFIED |
 | Lint | `ruff check apps tests` | All checks passed | VERIFIED |
 | Compile check | `compileall -q apps tests` | OK | VERIFIED |
 | Shellcheck | `shellcheck scripts/*.sh` | Exit 0 | VERIFIED |
 
 ---
 
-## 5. Backward Compatibility
+## 8. Backward Compatibility (credential rotation)
 
 - The `rotate()` method signature is unchanged: `(credential_id, *, user_id, created_by=None)`.
 - The return value is unchanged: `{id, user_id, access_key_id, secret_access_key, permissions, bucket_scope, prefix_scope, description, expires_at}`.
@@ -94,7 +153,7 @@ def rotate(self, credential_id, *, user_id, created_by=None):
 
 ---
 
-## 6. Remaining Open Items (Post-Remediation)
+## 9. Remaining Open Items (Post-Remediation)
 
 | Finding | Severity | Status | Reason |
 |---------|----------|--------|--------|

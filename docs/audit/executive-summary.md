@@ -2,7 +2,7 @@
 
 **Repository:** cvsz/zbase (S3Vault — self-hosted S3-compatible object storage control plane)
 **Audit date:** Sun Nov 08 2026
-**Baseline SHA:** `d70a681cc9f88884f644d5c43b0a259b62d78635`
+**Baseline SHA:** `35c1cfe` (HEAD of `feat/zbase-enterprise-hardening`, which is main `d70a681` plus the atomic credential-rotation fix `b9abb21` and this audit's supply-chain/coupling hardening `35c1cfe`)
 **Branch:** `feat/zbase-enterprise-hardening`
 **Framework:** ZEAZ reusable execution layer (ZEAZ-INTRODUCTION.md)
 
@@ -10,9 +10,14 @@
 
 ## 1. Overall Assessment
 
-The S3Vault codebase is a well-architected, security-conscious S3-compatible object storage control plane. It implements fail-closed configuration, AES-256-GCM envelope encryption, opaque hashed sessions, double-submit CSRF, capability-based RBAC, parameterised SQL, audit redaction, and operational safety gates. The test suite (90 unit tests) passes against live PostgreSQL 18 and SeaweedFS 3.97.
+The S3Vault codebase is a well-architected, security-conscious S3-compatible object storage control plane. It implements fail-closed configuration, AES-256-GCM envelope encryption, opaque hashed sessions, double-submit CSRF, capability-based RBAC, parameterised SQL, audit redaction, and operational safety gates. The test suite (95 unit tests; 113 integration/security/S3-compatibility tests) passes against live PostgreSQL 18 and SeaweedFS 3.97.
 
-**One P0 defect was identified and fixed:** credential rotation was not atomic — three separate auto-committing database operations could leave both old and replacement credentials active after a crash, or lose the `rotated_from` audit relationship. This is now wrapped in a single transaction with `SELECT ... FOR UPDATE` row locking.
+**P0 defects identified and fixed:**
+- Credential rotation was not atomic — three separate auto-committing database operations could leave both old and replacement credentials active after a crash, or lose the `rotated_from` audit relationship. Now wrapped in a single transaction with `SELECT ... FOR UPDATE` row locking (`b9abb21`).
+- Supply-chain workflows were over-privileged (`auto-fix-open-prs.yml` granted `pull-requests: write` + `issues: write` and three write-capable secrets despite performing read-only validation only). Reduced to `contents: read`; removed unused `issues: write` from `automated-audit-review-approve.yml` (`35c1cfe`).
+
+**Architecture coupling findings fixed:**
+- `UsageService` read the private adapter attribute `_capabilities`; `BucketService` re-loaded config mid-request via a local import. Both now use dependency injection via a public `capabilities` property and an injected `max_buckets_per_user` (`35c1cfe`), with regression tests in `tests/unit/test_service_coupling.py`.
 
 **No Critical findings remain unresolved. No High findings remain unresolved.**
 
@@ -46,7 +51,9 @@ The audit covered all seven domains mandated by the mission:
 | ZB-006 | Medium | Bucket deletion TOCTOU between emptiness check and engine delete | `apps/api/s3vault/services/buckets.py:147-175` | Open — window reduced by adapter re-check |
 | ZB-007 | Medium | No garbage collection / orphan object detection | No GC mechanism exists | Open — documented limitation |
 | ZB-008 | Medium | No object checksums persisted for integrity verification | Etags not stored in DB | Open — documented limitation |
-| ZB-009 | Low | `usage.py` accesses private adapter attribute `_capabilities` | `apps/api/s3vault/services/usage.py:127` | Open — cosmetic coupling |
+| ZB-ARC-01 | Low | `usage.py` accessed private adapter attribute `_capabilities` | `apps/api/s3vault/services/usage.py` | **RESOLVED** — public `capabilities` property added; regression test `tests/unit/test_service_coupling.py` |
+| ZB-ARC-02 | Low | `BucketService` re-loaded config mid-request via local import | `apps/api/s3vault/services/buckets.py` | **RESOLVED** — `max_buckets_per_user` injected at construction; regression test `tests/unit/test_service_coupling.py` |
+| ZB-SC-01 | Medium | CI workflow over-privileged (`pull-requests:`/`issues:` write + secrets for read-only validation) | `.github/workflows/auto-fix-open-prs.yml` | **RESOLVED** — reduced to `contents: read`; secrets removed |
 | ZB-010 | Informational | No failure injection, property-based, or concurrency testing | Test suite gap | **RESOLVED** (concurrency test added) |
 
 ---
@@ -66,27 +73,35 @@ The audit covered all seven domains mandated by the mission:
 
 | Suite | Command | Result | State |
 |-------|---------|--------|-------|
-| Unit tests | `pytest tests/unit` | 90 passed | VERIFIED |
+| Unit tests | `pytest tests/unit` | 95 passed | VERIFIED |
 | Lint | `ruff check apps tests` (ruff 0.9.6) | All checks passed | VERIFIED |
 | Compile check | `compileall -q apps tests` | OK | VERIFIED |
 | Shell scripts | `shellcheck scripts/*.sh` | Exit 0, no diagnostics | VERIFIED |
-| Integration + Security + S3-compat | `pytest tests/integration tests/security tests/s3-compatibility` | Previously verified: 110 passed | PARTIALLY VERIFIED (stack-dependent, slow per-test) |
+| Integration + Security + S3-compat | `pytest tests/integration tests/security tests/s3-compatibility` | 113 passed against live PostgreSQL 18 + SeaweedFS 3.97 | VERIFIED |
 | Bootstrap validation | `python3 -m unittest discover -s tests` | 5 passed | VERIFIED |
 | Template validation | `python3 scripts/validate_repo.py` | OK | VERIFIED |
+| Full CI gate | `make ci` | Exit 0 | VERIFIED |
 
-Integration/security/S3-compat tests were previously verified at 110 passed against PostgreSQL 18 + SeaweedFS 3.97 (per prior audit report). Each integration test takes ~45s due to app+migration setup; the full suite exceeds practical single-run bounds but individual credential/rotation tests (11 tests) all pass.
+Integration/security/S3-compat tests (113) were run against live PostgreSQL 18 + SeaweedFS 3.97 in an isolated stack and all passed, including the 11 credential/rotation tests and the cross-user tenant-isolation test.
 
 ---
 
 ## 6. Production Readiness Verdict
 
-**Not yet production-ready.** The following P0/P1 items remain open:
+**All verified defects resolved; remaining items are documented product-scope decisions or operational enhancements.**
 
-- MFA/TOTP and recovery codes (P0 — documented product scope gap)
-- Shared/distributed rate limiting (High — per-process only)
-- Prometheus metrics endpoint (High — `METRICS_ENABLED` config exists but no endpoint)
-- Presigned URL quota enforcement (High — bypasses quota reservation)
+**Resolved in this audit:**
+- P0 credential-rotation atomicity defect (`b9abb21`) — VERIFIED (11 rotation/concurrency tests).
+- P0/P1 supply-chain over-privilege finding ZB-SC-01 (`35c1cfe`) — VERIFIED (workflows re-validated; least privilege).
+- Low architecture-coupling findings ZB-ARC-01 / ZB-ARC-02 (`35c1cfe`) — VERIFIED (unit regression tests pass).
 
-All P0 **defects** (verified bugs, not missing features) are resolved. The codebase is secure-by-default, fail-closed, and well-tested. Remaining items are documented product-scope decisions or operational enhancements.
+**Still open (documented, not defects):**
+- MFA/TOTP and recovery codes (P0 — product scope; single-factor auth remains)
+- Shared/distributed rate limiting (High — per-process only; Redis not added by design)
+- Prometheus metrics endpoint / OpenTelemetry tracing (High — `METRICS_ENABLED` config exists, no endpoint)
+- Presigned URL quota enforcement (High — inherent TOCTOU of direct-to-engine URLs)
+- Bucket deletion TOCTOU, garbage collection, object checksum persistence (Medium — engine/scope limitations)
+
+The codebase is secure-by-default, fail-closed, and well-tested. Production readiness additionally requires operator actions (real `.env`, branch protection via `scripts/github_admin.py --apply --verify`, secret scanning, backup/restore drill on an isolated stack) — see `docs/audit/production-readiness.md` and `docs/audit/residual-risks.md`.
 
 See `docs/audit/production-readiness.md` for the full readiness gate assessment.

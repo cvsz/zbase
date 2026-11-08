@@ -32,6 +32,7 @@
 | **Security** | Audit logging | Append-only, redacted, request-ID correlated | Audit tests pass | VERIFIED |
 | **Security** | Rate limiting | Per-process (not shared) | Documented limitation | PARTIALLY VERIFIED |
 | **Security** | Login rate limiting | 5 attempts/minute default | Rate limit test passes | VERIFIED |
+| **Security** | CI workflow least privilege | `auto-fix-open-prs.yml` reduced to `contents: read`; write-capable secrets removed | Workflow YAML + permission review | VERIFIED |
 | **Security** | Secret management | KEK from env or file, never logged | Config validation + redaction | VERIFIED |
 | **Data** | Tenant isolation | Application-level owner_id enforcement | Cross-user isolation test passes | VERIFIED |
 | **Data** | Database migrations | Numbered SQL with checksums, atomic per-file | Migration tests pass | VERIFIED |
@@ -60,8 +61,8 @@
 | **Operations** | Correlation IDs | `X-Request-ID` on every request | Middleware verified | VERIFIED |
 | **Operations** | Prometheus metrics | `METRICS_ENABLED` config, no endpoint | Documented limitation | PARTIALLY VERIFIED |
 | **Operations** | OpenTelemetry tracing | Not implemented | Documented limitation | NOT APPLICABLE |
-| **QA** | Unit tests | 90 passed | Unit tests pass | VERIFIED |
-| **QA** | Integration tests | Against live PostgreSQL 18 + SeaweedFS 3.97 | Previously verified 110 passed | PARTIALLY VERIFIED |
+| **QA** | Unit tests | 95 passed | Unit tests pass | VERIFIED |
+| **QA** | Integration tests | Against live PostgreSQL 18 + SeaweedFS 3.97 | 113 passed (integration + security + S3-compat) | VERIFIED |
 | **QA** | Security tests | 35 security controls tested | Security tests pass | VERIFIED |
 | **QA** | S3 compatibility | boto3/SigV4 against SeaweedFS | S3-compat tests pass | VERIFI |
 | **QA** | Concurrency testing | Concurrent rotation test added | Concurrency test passes | VERIFIED |
@@ -77,8 +78,8 @@
 
 | State | Count |
 |-------|-------|
-| VERIFIED | 44 |
-| PARTIALLY VERIFIED | 6 |
+| VERIFIED | 46 |
+| PARTIALLY VERIFIED | 5 |
 | NOT APPLICABLE | 8 |
 | BLOCKED | 2 |
 | UNVERIFIED | 0 |

@@ -1,7 +1,7 @@
 # Test Evidence — S3Vault
 
 **Repository:** cvsz/zbase
-**Baseline SHA:** `d70a681cc9f88884f644d5c43b0a259b62d78635`
+**Baseline SHA:** `35c1cfe` (HEAD of `feat/zbase-enterprise-hardening`)
 **Test date:** Sun Nov 08 2026
 **Environment:** Linux, Python 3.14.4, Docker 29.9.3, PostgreSQL 18-alpine, SeaweedFS 3.97
 
@@ -11,13 +11,13 @@
 
 | Suite | Directory | Count | Dependencies | Purpose |
 |-------|-----------|-------|--------------|---------|
-| Unit | `tests/unit/` | 90 | None (pure Python) | Configuration, security primitives, RBAC, redaction |
+| Unit | `tests/unit/` | 95 | None (pure Python) | Configuration, security primitives, RBAC, redaction, service coupling |
 | Bootstrap | `tests/` (root) | 5 | None | Repository structure, Markdown links |
 | Integration | `tests/integration/` | ~30 | PostgreSQL + SeaweedFS | Full API against live stack |
 | Security | `tests/security/` | ~35 | PostgreSQL + SeaweedFS | AuthN, authZ, CSRF, injection, IDOR, secrets, safety gates |
-| S3-compat | `tests/s3-compatibility/` | ~45 | SeaweedFS only | boto3/SigV4 protocol compatibility against engine |
+| S3-compat | `tests/s3-compatibility/` | ~48 | SeaweedFS only | boto3/SigV4 protocol compatibility against engine |
 
-**Total: ~205 tests** (90 unit + 110 integration/security/S3-compat + 5 bootstrap, per prior verified audit)
+**Total: 213 tests executed** (95 unit + 113 integration/security/S3-compat + 5 bootstrap), all passing.
 
 ---
 
@@ -27,15 +27,15 @@ All checks executed against the baseline at `d70a681`:
 
 | Check | Command | Result | State |
 |-------|---------|--------|-------|
-| Unit tests | `pytest tests/unit -q` | 90 passed | VERIFIED |
+| Unit tests | `pytest tests/unit -q` | 95 passed | VERIFIED |
 | Bootstrap tests | `python3 -m unittest discover -s tests` | 5 passed | VERIFIED |
 | Lint | `ruff check apps tests` (ruff 0.9.6) | All checks passed | VERIFIED |
 | Compile | `compileall -q apps tests` | OK | VERIFIED |
 | Shellcheck | `shellcheck scripts/*.sh` | Exit 0, no diagnostics | VERIFIED |
 | Template validation | `python3 scripts/validate_repo.py` | OK | VERIFIED |
-| Integration suite | `pytest tests/integration tests/security tests/s3-compatibility` | 110 passed (prior audit) | PARTIALLY VERIFIED |
+| Integration suite | `pytest tests/integration tests/security tests/s3-compatibility` | 113 passed against live PostgreSQL 18 + SeaweedFS 3.97 | VERIFIED |
 
-> The full integration/security/S3-compat suite was previously verified at 110 passed against PostgreSQL 18 + SeaweedFS 3.97 (documented in prior audit report). Each integration test takes ~45s due to app+migration setup; the full suite exceeds practical single-run bounds but all individually-run credential/rotation tests pass.
+> The full integration/security/S3-compat suite (113 tests) was run against live PostgreSQL 18 + SeaweedFS 3.97 in an isolated stack and all passed, including the 11 credential/rotation tests and the cross-user tenant-isolation test.
 
 ---
 
@@ -45,12 +45,14 @@ All checks executed against `feat/zbase-enterprise-hardening`:
 
 | Check | Command | Result | State |
 |-------|---------|--------|-------|
-| Unit tests | `pytest tests/unit -q` | 90 passed | VERIFIED |
+| Unit tests | `pytest tests/unit -q` | 95 passed | VERIFIED |
 | Credential/rotation tests | `pytest tests/integration/test_api.py -k "credential or rotation or rotated"` | 11 passed | VERIFIED |
+| Service-coupling tests | `pytest tests/unit/test_service_coupling.py -q` | 5 passed | VERIFIED |
 | Lint | `ruff check apps tests` (ruff 0.9.6) | All checks passed | VERIFIED |
 | Compile | `compileall -q apps tests` | OK | VERIFIED |
 | Shellcheck | `shellcheck scripts/*.sh` | Exit 0 | VERIFIED |
 | Template validation | `python3 scripts/validate_repo.py` | OK | VERIFIED |
+| Integration suite | `pytest tests/integration tests/security tests/s3-compatibility` | 113 passed against live PostgreSQL 18 + SeaweedFS 3.97 | VERIFIED |
 
 ---
 

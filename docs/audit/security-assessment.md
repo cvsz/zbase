@@ -113,6 +113,8 @@
 | ZB-SEC-04 | High | No OpenTelemetry / Prometheus metrics | `METRICS_ENABLED` config, no endpoint | Open — add `/metrics` endpoint and OTel tracing |
 | ZB-SEC-05 | High | Quota bypass via presigned upload URLs | `routes_buckets.py:540-583` | Open — enforce quota headroom before issuing presigned PUT |
 | ZB-SEC-06 | Medium | Bucket deletion TOCTOU window | `services/buckets.py:147-175` | Open — window reduced by adapter re-check; engine-level conditional delete not available |
+| ZB-SC-01 | Medium | CI workflow over-privileged (write permissions + secrets for read-only validation) | `.github/workflows/auto-fix-open-prs.yml` | **RESOLVED** — reduced to `contents: read`; write-capable secrets removed |
+| ZB-ARC-01 / ZB-ARC-02 | Low | Service-layer coupling (private attribute access; local config import) | `services/usage.py`, `services/buckets.py` | **RESOLVED** — public `capabilities` property; injected `max_buckets_per_user`; covered by `tests/unit/test_service_coupling.py` |
 
 ---
 

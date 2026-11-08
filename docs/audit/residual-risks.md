@@ -34,6 +34,8 @@ The following risks are known, documented, and accepted as product-scope decisio
 | R-M-001 | Credential rotation not atomic | Wrapped in `self._db.transaction()` with `SELECT FOR UPDATE` | 11 rotation/concurrency tests pass |
 | R-M-002 | `rotated_from` relationship could be inverted | Fixed: replacement row records `rotated_from = <old id>` | `test_credential_rotation_records_rotated_from_on_replacement` passes |
 | R-M-003 | Concurrent rotation race | `SELECT FOR UPDATE` serializes rotations | `test_concurrent_credential_rotation_is_safe` passes |
+| R-M-004 | CI workflow over-privileged (write perms + secrets for read-only validation) | `auto-fix-open-prs.yml` reduced to `contents: read`; secrets removed; `automated-audit-review-approve.yml` reduced to `contents: read` + `pull-requests: write` | Workflow YAML + least-privilege review |
+| R-M-005 | Service-layer coupling (private attribute access; local config import) | Public `capabilities` property on `StorageAdapter`; `max_buckets_per_user` injected into `BucketService` | `tests/unit/test_service_coupling.py`; `make ci` passes |
 
 ---
 

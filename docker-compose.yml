@@ -58,6 +58,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
       STORAGE_ENGINE: seaweedfs
       STORAGE_ENGINE_ENDPOINT: http://seaweedfs:8333
+      # The engine lives on the internal network and publishes no ports, so
+      # plaintext HTTP there is acceptable only with the explicit opt-in.
+      # Defaults to false (fail-closed): the operator must set
+      # STORAGE_PLAINTEXT_ALLOWED=true to allow plaintext to the engine.
+      STORAGE_PLAINTEXT_ALLOWED: ${STORAGE_PLAINTEXT_ALLOWED:-false}
       STORAGE_ROOT_ACCESS_KEY: ${STORAGE_ROOT_ACCESS_KEY:?}
       STORAGE_ROOT_SECRET_KEY: ${STORAGE_ROOT_SECRET_KEY:?}
       STORAGE_ADDRESSING_STYLE: ${STORAGE_ADDRESSING_STYLE:-path}

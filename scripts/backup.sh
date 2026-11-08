@@ -12,7 +12,7 @@
 # The last known-good backup is never deleted to make room for a new one.
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit
 
 BACKUP_ROOT="${S3VAULT_BACKUP_DIR:-./backups}"

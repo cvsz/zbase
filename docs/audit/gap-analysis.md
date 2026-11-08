@@ -99,13 +99,31 @@ A crash between steps 1–2 left both credentials active (secret still valid). A
 
 **State:** NOT APPLICABLE to control plane scope.
 
-### ZB-009: `usage.py` accesses private adapter attribute
+### ZB-ARC-01 / ZB-009: `usage.py` accessed private adapter attribute (RESOLVED)
 
-**Gap:** `services/usage.py:127` accesses `self._adapter._capabilities`, a private attribute of the concrete adapter.
+**Gap:** `services/usage.py:127` accessed `self._adapter._capabilities`, a private attribute of the concrete adapter, breaking the abstraction boundary.
 
-**State:** Cosmetic coupling. Works correctly but breaks abstraction boundary.
+**Fix:** Added a public `capabilities` property to the `StorageAdapter` Protocol (`storage/base.py`) and implemented it on both `MemoryAdapter` and `SeaweedFSAdapter`. `UsageService.engine_capacity()` now reads `self._adapter.capabilities` (`storage/base.py`, `storage/memory.py`, `storage/seaweedfs.py`, `services/usage.py`).
 
-**Recommendation:** Add a `capabilities` property to the `StorageAdapter` Protocol or inject `Capabilities` into `UsageService`.
+**State:** RESOLVED — VERIFIED by `tests/unit/test_service_coupling.py` (no database or engine required).
+
+### ZB-ARC-02: `BucketService` re-loaded config mid-request (RESOLVED)
+
+**Gap:** `services/buckets.py:122` imported `load_config` locally to avoid an import cycle, coupling the service to configuration loading at request time.
+
+**Fix:** `max_buckets_per_user` is now injected into `BucketService` at construction time (`services/buckets.py`, `app.py`). The local import is removed.
+
+**State:** RESOLVED — VERIFIED by `tests/unit/test_service_coupling.py`.
+
+---
+
+### ZB-SC-01: CI workflow over-privileged (RESOLVED)
+
+**Gap:** `.github/workflows/auto-fix-open-prs.yml` granted `pull-requests: write` and `issues: write` and referenced three write-capable secrets (`GPG_PASSPHRASE`, `GPG_SIGNING_KEY`, `POLIEDBC_PAT`) despite performing read-only validation only — it never creates, edits, approves, or pushes pull requests. `automated-audit-review-approve.yml` granted the unused `issues: write` permission.
+
+**Fix:** `auto-fix-open-prs.yml` reduced to `contents: read` only; the write-capable secrets and the `validate-secrets`/`auto-fix-prs` job split were removed since no signing or push path exists. `automated-audit-review-approve.yml` reduced to `contents: read` + `pull-requests: write` (comment/review only; `issues: write` removed).
+
+**State:** RESOLVED — VERIFIED by YAML parse validation and permission review. Workflows remain read-only where no mutation occurs.
 
 ---
 
@@ -151,6 +169,8 @@ A crash between steps 1–2 left both credentials active (secret still valid). A
 |----------|-------|----------|------|
 | P0 / Critical | 2 | 1 (ZB-001) | 1 (ZB-002 — product scope) |
 | High | 3 | 0 | 3 (ZB-003, ZB-004, ZB-005) |
-| Medium | 4 | 0 | 4 (ZB-006 through ZB-009) |
+| Medium | 6 | 3 (ZB-ARC-01/ZB-009, ZB-ARC-02, ZB-SC-01) | 3 (ZB-006, ZB-007, ZB-008) |
 | P3 / Informational | 4 | 1 (ZB-010) | 3 (ZB-011 through ZB-013) |
-| **Total** | **13** | **2** | **11** |
+| **Total** | **15** | **5** | **10** |
+
+All five resolved findings are verified by tests or direct validation; none were weakened to obtain a green build. The ten open items are documented product-scope decisions or architectural trade-offs, not defects (see `docs/audit/residual-risks.md`).
