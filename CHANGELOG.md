@@ -9,11 +9,14 @@ The format follows Keep a Changelog conventions; generated projects should adopt
 ### Added
 
 - Safe project identity bootstrap with explicit dry-run/apply and idempotence tests.
+- `tests/integration/test_api.py`: `test_credential_rotation_records_rotated_from_on_replacement` verifies `rotated_from` is recorded on the replacement row (not inverted onto the revoked row).
 
 ### Fixed
 
 - `services/credentials.py`: `CredentialService.rotate()` wrote `rotated_from` onto the revoked (old) row pointing at the replacement — semantically inverted. The replacement row now records `rotated_from = <old credential id>` so the column reads "this credential was rotated from <old id>".
-- `.env.production`: replaced realistic secret values (engine keys, DB password, KEK, bootstrap admin password) with `REPLACE_ME_...` placeholders; the file remains gitignored and untracked.
+- `.env` and `.env.production`: replaced realistic secret values (engine keys, DB password, KEK, bootstrap admin password, hostnames) with `REPLACE_ME_...` placeholders; both files remain gitignored and untracked.
+- `security/tokens.py`: removed dead `_SECRET_KEY_ALPHABET` expression and unused `base64` import.
+- `main.py`: removed dead `cfg.host if hasattr(cfg, "host")` path (AppConfig has no `host`); uvicorn host is `0.0.0.0`.
 - `scripts/{backup,restore,test-integration}.sh`: `cd "$REPO_ROOT" || exit` (shellcheck SC2164), unused loop variable removed (SC2034), and a targeted `shellcheck disable=SC2329` with rationale for the trap-invoked `cleanup()`. `shellcheck scripts/*.sh` now exits 0.
 
 ### Security
