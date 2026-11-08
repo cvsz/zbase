@@ -28,12 +28,12 @@ executed.
 | Deployment bundle (Docker, nginx, scripts) | Implemented |
 | MFA, OIDC SSO | **Not implemented** — see below |
 
-**Test evidence: 200 tests passing** (90 unit, 110 integration + S3
-compatibility, 35 security) against PostgreSQL 18 and SeaweedFS 3.97.
+**Test evidence: 208 tests passing** (95 unit, 113 integration + security +
+S3 compatibility) against PostgreSQL 18 and SeaweedFS 3.97.
 
 ```bash
-make test-unit           # 88 tests, no containers
-make test-integration    # 107 tests, starts an isolated stack
+make test-unit           # 95 tests, no containers
+make test-integration    # 113 tests, starts an isolated stack
 ```
 
 ## Quick start

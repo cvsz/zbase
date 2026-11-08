@@ -10,10 +10,15 @@ The format follows Keep a Changelog conventions; generated projects should adopt
 
 - Safe project identity bootstrap with explicit dry-run/apply and idempotence tests.
 - `tests/integration/test_api.py`: `test_credential_rotation_records_rotated_from_on_replacement` verifies `rotated_from` is recorded on the replacement row (not inverted onto the revoked row).
+- `tests/integration/test_api.py`: `test_credential_rotation_chain_maintains_rotated_from` verifies multi-rotation chain integrity.
+- `tests/integration/test_api.py`: `test_credential_rotation_of_revoked_credential_fails` verifies revoked credentials cannot be re-rotated.
+- `tests/integration/test_api.py`: `test_concurrent_credential_rotation_is_safe` verifies `SELECT FOR UPDATE` serializes concurrent credential rotations.
+- `docs/audit/`: executive summary, architecture review, security assessment, gap analysis, remediation report, test evidence, production readiness, and residual risks.
 
 ### Fixed
 
 - `services/credentials.py`: `CredentialService.rotate()` wrote `rotated_from` onto the revoked (old) row pointing at the replacement — semantically inverted. The replacement row now records `rotated_from = <old credential id>` so the column reads "this credential was rotated from <old id>".
+- `services/credentials.py`: `CredentialService.rotate()` now performs all mutations (insert replacement, revoke original, set `rotated_from`) inside a single database transaction with `SELECT ... FOR UPDATE` row lock, so a crash can never leave both credentials active or lose the rotation audit relationship, and concurrent rotations are serialized.
 - `.env` and `.env.production`: replaced realistic secret values (engine keys, DB password, KEK, bootstrap admin password, hostnames) with `REPLACE_ME_...` placeholders; both files remain gitignored and untracked.
 - `security/tokens.py`: removed dead `_SECRET_KEY_ALPHABET` expression and unused `base64` import.
 - `main.py`: removed dead `cfg.host if hasattr(cfg, "host")` path (AppConfig has no `host`); uvicorn host is `0.0.0.0`.

@@ -12,7 +12,7 @@
 # The last known-good backup is never deleted to make room for a new one.
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit
 
 BACKUP_ROOT="${S3VAULT_BACKUP_DIR:-./backups}"
@@ -76,9 +76,13 @@ fi
 
 # ------------------------------------------------------------- deployment
 log "capturing deployment configuration"
-cp .env "$STAMP_DIR/env.snapshot" 2>/dev/null || echo "env=absent" >> "$manifest"
+# Key material (KEK_BASE64, STORAGE_ROOT_SECRET_KEY, database passwords) lives
+# in .env and is intentionally NOT backed up here: a backup containing the KEK
+# would be a plaintext copy of every credential secret. Key material is
+# rotated and restored out of band; see docs/SECURITY.md#secret-management.
 cp docker-compose.yml "$STAMP_DIR/docker-compose.yml" 2>/dev/null
 cp infra/proxy/nginx.conf "$STAMP_DIR/nginx.conf" 2>/dev/null
+echo "env=excluded (key material managed separately)" >> "$manifest"
 
 # --------------------------------------------------------------- checksum
 ( cd "$STAMP_DIR" && sha256sum ./* > SHA256SUMS 2>/dev/null ) || true

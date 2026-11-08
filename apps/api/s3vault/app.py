@@ -59,7 +59,12 @@ class Services:
         return self._capabilities
 
     def buckets(self) -> BucketService:
-        return BucketService(self.db, self.adapter, self.capabilities)
+        return BucketService(
+            self.db,
+            self.adapter,
+            self.capabilities,
+            max_buckets_per_user=self.config.quotas.max_buckets_per_user,
+        )
 
     def close(self) -> None:
         self.db.close()

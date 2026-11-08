@@ -209,6 +209,10 @@ class SeaweedFSAdapter:
         )
         return self._capabilities
 
+    @property
+    def capabilities(self) -> Capabilities | None:
+        return self._capabilities
+
     def _create_bucket_raw(self, bucket: str) -> None:
         self._call("probe create_bucket", self._client.create_bucket, Bucket=bucket)
 

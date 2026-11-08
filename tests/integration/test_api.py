@@ -420,6 +420,136 @@ def test_credential_rotation_records_rotated_from_on_replacement(auth_client):
     )
 
 
+def test_credential_rotation_chain_maintains_rotated_from(auth_client):
+    """Multiple rotations form a chain: each replacement points at its predecessor."""
+    services = auth_client.app.state.services
+    created = auth_client.post("/api/v1/credentials", json={"permissions": ["read"]})
+    credential_id = created.json()["credential"]["id"]
+
+    # First rotation.
+    r1 = auth_client.post(f"/api/v1/credentials/{credential_id}/rotate")
+    assert r1.status_code == 200
+    r1_id = r1.json()["credential"]["id"]
+
+    # Second rotation of the replacement.
+    r2 = auth_client.post(f"/api/v1/credentials/{r1_id}/rotate")
+    assert r2.status_code == 200
+    r2_id = r2.json()["credential"]["id"]
+
+    # The chain: r2 <- r1 <- original.
+    row_r2 = services.db.fetch_one(
+        "SELECT rotated_from FROM credentials WHERE id = %s", (r2_id,)
+    )
+    assert str(row_r2["rotated_from"]) == r1_id
+    row_r1 = services.db.fetch_one(
+        "SELECT rotated_from FROM credentials WHERE id = %s", (r1_id,)
+    )
+    assert str(row_r1["rotated_from"]) == credential_id
+    row_orig = services.db.fetch_one(
+        "SELECT rotated_from FROM credentials WHERE id = %s", (credential_id,)
+    )
+    assert row_orig["rotated_from"] is None
+
+
+def test_credential_rotation_of_revoked_credential_fails(auth_client):
+    """Rotating an already-revoked credential must return a conflict."""
+    created = auth_client.post("/api/v1/credentials", json={"permissions": ["read"]})
+    credential_id = created.json()["credential"]["id"]
+
+    # Rotate once: the original is revoked.
+    rotated = auth_client.post(f"/api/v1/credentials/{credential_id}/rotate")
+    assert rotated.status_code == 200
+    replacement_id = rotated.json()["credential"]["id"]
+
+    # Rotating the original again must fail: it is revoked.
+    second = auth_client.post(f"/api/v1/credentials/{credential_id}/rotate")
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "conflict"
+
+    # Rotating the replacement is fine.
+    third = auth_client.post(f"/api/v1/credentials/{replacement_id}/rotate")
+    assert third.status_code == 200
+
+
+def test_concurrent_credential_rotation_is_safe(auth_client):
+    """Concurrent rotations of the same credential cannot leave two active keys.
+
+    Two threads rotate the same credential at the same time. The row-level
+    lock (SELECT ... FOR UPDATE) inside the rotate() transaction serializes
+    them: one rotates successfully, the other finds the target already
+    revoked and reports a conflict. After both complete, exactly one
+    non-revoked credential exists and the original access key is no longer
+    resolvable.
+    """
+    import threading
+
+    from s3vault.errors import ConflictError, NotFoundError
+
+    services = auth_client.app.state.services
+    created = auth_client.post("/api/v1/credentials", json={"permissions": ["read"]})
+    credential_id = created.json()["credential"]["id"]
+    original_akid = created.json()["credential"]["access_key_id"]
+    user_id = str(
+        services.db.fetch_one(
+            "SELECT user_id FROM credentials WHERE id = %s", (credential_id,)
+        )["user_id"]
+    )
+
+    results: list[tuple[str, object | None]] = []
+
+    def rotate_once(tag: str) -> None:
+        try:
+            result = services.credentials.rotate(
+                credential_id, user_id=user_id, created_by=user_id
+            )
+            results.append((tag, result["id"]))
+        except Exception as exc:  # noqa: BLE001 - capture for assertion
+            results.append((tag, exc))
+
+    t1 = threading.Thread(target=rotate_once, args=("t1",))
+    t2 = threading.Thread(target=rotate_once, args=("t2",))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # No connection-pool failures.
+    assert not any(
+        isinstance(r[1], Exception) and "pool" in str(r[1]).lower()
+        for r in results
+    ), f"connection pool failure: {results}"
+
+    # Exactly one rotation succeeded; the other hit a conflict (target revoked
+    # by the first rotation after the row lock was released).
+    successes = [r for r in results if isinstance(r[1], str)]
+    conflicts = [r for r in results if isinstance(r[1], Exception)]
+    assert len(successes) == 1, f"expected exactly one successful rotation, got {results}"
+    assert len(conflicts) == 1, f"expected exactly one conflict, got {results}"
+    assert isinstance(conflicts[0][1], ConflictError), f"expected ConflictError, got {conflicts[0][1]}"
+
+    # The original access key must no longer be resolvable.
+    try:
+        services.credentials.resolve_secret(original_akid)
+        assert False, "original credential must not be resolvable after rotation"
+    except NotFoundError:
+        pass
+
+    # The replacement must be active and resolvable.
+    replacement_id = successes[0][1]
+    replacement_akid = services.db.fetch_one(
+        "SELECT access_key_id FROM credentials WHERE id = %s", (replacement_id,)
+    )["access_key_id"]
+    resolved = services.credentials.resolve_secret(replacement_akid)
+    assert resolved["id"] == replacement_id
+
+    # Exactly one non-revoked credential exists for this lineage.
+    active = services.db.fetch_all(
+        "SELECT id FROM credentials WHERE (id = %s OR rotated_from = %s) AND revoked_at IS NULL",
+        (credential_id, credential_id),
+    )
+    assert len(active) == 1, f"expected exactly one active credential, got {len(active)}"
+
+
 def test_invalid_permission_is_rejected(auth_client):
     response = auth_client.post("/api/v1/credentials", json={"permissions": ["destroy"]})
     assert response.status_code == 400
