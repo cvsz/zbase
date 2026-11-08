@@ -45,7 +45,7 @@ A feature is reported as supported only if a real call succeeded.
 This matters. An earlier probe treated "no CORS configured" (an error code) as
 "unsupported" and reported two working features as missing. The probe now
 distinguishes *not configured* from *not implemented*. See
-[S3-COMPATIBILITY.md#not-configured-is-not-unsupported](S3-COMPATIBILITY.md#not-configured-is-not-supported).
+[S3-COMPATIBILITY.md#not-configured-is-not-unsupported](S3-COMPATIBILITY.md#not-configured-is-not-unsupported).
 
 ## Component map
 
@@ -120,7 +120,8 @@ between engine buckets and managed metadata without changing either.
    `TRUSTED_PROXY_HOPS` declares a proxy is present.
 3. The body-size middleware rejects anything over
    `REQUEST_BODY_LIMIT_BYTES` with a structured `413`, using `Content-Length`
-   when present and measuring the buffered body otherwise.
+   when present and measuring streamed bytes on the ASGI receive stream
+   otherwise — no buffering, so chunked bodies cannot bypass the limit.
 4. The session cookie is hashed and looked up; expiry and idle timeout are
    checked; `last_seen_at` is refreshed.
 5. For a mutating request, the CSRF token is verified against the hash stored
