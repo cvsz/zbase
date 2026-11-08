@@ -9,6 +9,16 @@ The format follows Keep a Changelog conventions; generated projects should adopt
 ### Added
 
 - Safe project identity bootstrap with explicit dry-run/apply and idempotence tests.
+
+### Fixed
+
+- `services/credentials.py`: `CredentialService.rotate()` wrote `rotated_from` onto the revoked (old) row pointing at the replacement — semantically inverted. The replacement row now records `rotated_from = <old credential id>` so the column reads "this credential was rotated from <old id>".
+- `.env.production`: replaced realistic secret values (engine keys, DB password, KEK, bootstrap admin password) with `REPLACE_ME_...` placeholders; the file remains gitignored and untracked.
+- `scripts/{backup,restore,test-integration}.sh`: `cd "$REPO_ROOT" || exit` (shellcheck SC2164), unused loop variable removed (SC2034), and a targeted `shellcheck disable=SC2329` with rationale for the trap-invoked `cleanup()`. `shellcheck scripts/*.sh` now exits 0.
+
+### Security
+
+- `.env.production` secret placeholder hygiene removes a local secret-leakage risk; no `.env`, `.pem`, `id_rsa`, or secret-shaped files are tracked.
 - Generated README/ABOUT templates and startup/profile documentation.
 - CI bootstrap test coverage and fail-closed Makefile placeholders.
 - ZEAZ cross-agent engineering execution framework.

@@ -13,7 +13,7 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit
 
 BACKUP_ROOT="${S3VAULT_BACKUP_DIR:-./backups}"
 RETENTION_DAYS="${S3VAULT_BACKUP_RETENTION_DAYS:-14}"

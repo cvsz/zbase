@@ -11,7 +11,7 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit
 
 PG_PORT="${PG_PORT:-55432}"
 SW_PORT="${SW_PORT:-8333}"
@@ -47,6 +47,8 @@ sys.exit(0 if ok else 1)
 PYEOF
 }
 
+# shellcheck disable=SC2329
+# Invoked by `trap cleanup EXIT` below; shellcheck cannot see trap references.
 cleanup() {
   if [ "$KEEP_STACK" -eq 0 ]; then
     scripts/test-stack.sh down >/dev/null 2>&1 || true
